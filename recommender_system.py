@@ -1,15 +1,18 @@
-import pandas as pd
+#!/usr/bin/python3
+
+#import pandas as pd
 import time
 import numpy as np
-import pyspark
+#import pyspark
 from numpy import random
 from pyspark import sql
+import time
 
 sc = pyspark.SparkContext()
 
 #Open rdd
 
-rdd = sc.textFile("hdfs:///user/hadoop/plsi/input/ratings_1m.csv")
+rdd = sc.textFile("ratings.csv")
 
 #Remove header line
 header = rdd.first()
@@ -46,6 +49,8 @@ LogLik = []
 ###### Run the EM algorithm on nb_iterations #####
 
 for i in range(nb_iterations) :
+
+    start = time.time()
     
     #### M-STEP - Compute p(s|z) and p(z|u) based on q( z | (u,s) ) ####
     
@@ -81,7 +86,7 @@ for i in range(nb_iterations) :
     Pzu = Nzu.join(Nu)
     Pzu = Pzu.map(lambda x : ((x[1][0][0], x[0]), x[1][0][1] / x[1][1])) #This gives us p(u | z)
     
-    ### E-STEP - Compute new q( z | (u,s) ) = p(s|z)p(z|u) / ∑p(s|z)p(z|u) ###
+    ### E-STEP - Compute new q( z | (u,s) ) = p(s|z)p(z|u) / sum ( p(s|z)p(z|u) )###
     
     ## For each (u,s,z), compute p(s | z) * p(z | u) ##
     
@@ -96,7 +101,7 @@ for i in range(nb_iterations) :
     #We now multiply p(z|u) and p(s|z) to obtain p(s|u)
     PzuPsz = PzuPsz.map(lambda x: ((x[1][0][0][1], x[0][0]), (x[0][1], x[1][0][1]*x[1][1])))
     
-    ## For each (u,s), we compute ∑ p(s | z)* p(z | u) (summing over z) (this corresponds to p(s|u)) ##
+    ## For each (u,s), we compute sum ( p(s | z)* p(z | u) ) (summing over z) (this corresponds to p(s|u)) ##
     SumPzuPsz = PzuPsz.map(lambda x : (x[0], x[1][1])).reduceByKey(lambda x,y : x+y)
     
     #Update LogLikelihood
@@ -106,9 +111,13 @@ for i in range(nb_iterations) :
     print(L/N)
     LogLik.append(L/N)
     
-    #For each (u,s,z), compute p(s|z)p(z|u) / ∑p(s|z)p(z|u) (this corresponds to the new q( z | (u,s) )
+    #For each (u,s,z), compute p(s|z)p(z|u) / sum( p(s|z)p(z|u) ) (this corresponds to the new q( z | (u,s) )
     q = PzuPsz.join(SumPzuPsz)
     q = q.map(lambda x : ((x[0], x[1][0][0]), x[1][0][1]/x[1][1]))
+
+    end = time.time()
+
+    print("Iteration "+str(i)+" completed in "+str(end-start))
 
 
 #Build the recommendation
