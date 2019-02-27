@@ -3,7 +3,7 @@
 #import pandas as pd
 import time
 import numpy as np
-#import pyspark
+import pyspark
 from numpy import random
 from pyspark import sql
 import time
@@ -141,4 +141,6 @@ def prediction(rdd, threshold):
     return(rdd.map(lambda x : (x[0],x[1], x[2] >=threshold)))
 
 result = prediction(Psu, 0.01)
-result.collect()[0:10]
+
+#Save the result on HDFS
+result.saveAsTextFile("hdfs:///user/hadoop/plsi/output/final_result")
