@@ -139,26 +139,24 @@ print("\n \n \n Recommendation \n \n \n ")
 
 #Build the recommendation
 
-users = rdd.map(lambda x : x[0])
-movies = rdd.map(lambda x : x[1])
-classes = sc.parallelize(range(nb_z))
-    
-data = users.cartesian(movies)
-data = data.cartesian(classes).map(lambda line : (line[0][0], line[0][1], line[1]))
-data = data.distinct()
-
-ordered_data = data.sortBy(lambda x : (x[0], x[1], x[2]))
-couples = ordered_data.map(lambda x : ((x[2], x[0]), (x[1], x[2])))
-probas = couples.join(Pzu).coalesce(num_partitions).map(lambda x : (x[1][0], (x[0], x[1][1])))
-probas = probas.join(Psz).coalesce(num_partitions)
-Psu = probas.map(lambda x : (x[1][0][0][1], x[0][0], x[1][0][1]*x[1][1]))
-probs = Psu.map(lambda x : x[2])
-
-def prediction(rdd, threshold):
-    return(rdd.map(lambda x : (x[0],x[1], x[2] >=threshold)))
-
-result = prediction(Psu, 0.01)
-
-result.saveAsTextFile("hdfs:///user/hadoop/recommend/result")
+#users = rdd.map(lambda x : x[0])
+#movies = rdd.map(lambda x : x[1])
+#classes = sc.parallelize(range(nb_z))
+#    
+#data = users.cartesian(movies)
+#data = data.cartesian(classes).map(lambda line : (line[0][0], line[0][1], line[1]))
+#data = data.distinct()
+#
+#ordered_data = data.sortBy(lambda x : (x[0], x[1], x[2]))
+#couples = ordered_data.map(lambda x : ((x[2], x[0]), (x[1], x[2])))
+#probas = couples.join(Pzu).coalesce(num_partitions).map(lambda x : (x[1][0], (x[0], x[1][1])))
+#probas = probas.join(Psz).coalesce(num_partitions)
+#Psu = probas.map(lambda x : (x[1][0][0][1], x[0][0], x[1][0][1]*x[1][1]))
+#probs = Psu.map(lambda x : x[2])
+#
+#def prediction(rdd, threshold):
+#    return(rdd.map(lambda x : (x[0],x[1], x[2] >=threshold)))
+#
+#result = prediction(Psu, 0.01)
 
 sc.stop()
