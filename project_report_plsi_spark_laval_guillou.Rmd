@@ -6,6 +6,8 @@ output:
   html_document: default
 ---
 
+#Summary
+
 # Introduction
 
 Recommender systems have been a major hype in data science recently with the growth of ad-targeting (Criteo, millemercis), media websites and services (Netflix, Google News, Spotify) for whom recommendation is a major revenue-driver. Recommender systems, who have been around since the 1990's, use in general content-based or collaborative approaches. Using movies as examples, content-based filtering is like saying: if you enjoyed Star Trek, you should like Star Wars, because they are both Science-Fiction movies. Collaborative approaches have proved themselves to be quite efficient in general: you empirically consider that if you have watched the Silence of the Lambs and loved it you should like the Shawshank Redemption even though it's not the same kind of movie, because most users who like one movie liked the other.
@@ -99,6 +101,35 @@ $$
 $$
 p(Star Wars \mid Gaëlle) = p( 1 \mid Gaëlle) * p(Star Wars \mid1) + p(2 \mid Gaëlle) * p(Star Wars \mid 2)
 $$
+
+##Comments to main fragments of code
+
+####Initialize random probabilities so that they sum to 1
+--> Insert screen code 1 
+
+During the initialization of the algorithm, we assign a random probability to each triplet (user, movie, class). However, we need to make sure that for each couple (user, movie), the sum of probabilities over the classes sum to 1. Otherwise we end up with probabilities larger than 1, which is impossible. 
+
+In order to respect this constraint, we created an array of probabilities summing to 1 every 3 probas (if the number of classes was 3). Then, we used the pop() function to assign the successive probabilities to each triplet in the RDD. 
+
+
+####Control the number of partitions after a join operation 
+--> Insert screen code 2
+
+Every time we performed a join operation, we realized that running the code would take a very long time - at the end, each iteration step of the algorithm would take at least 30 minutes. To solve this issue, we had to fix the number of partitions at the begining. Then, by using the coalesce function along with the initial number of partitions, we were able to control the number of partitions generated in our RDD after a join operation. 
+Using this function was crucial in order to speed up the execution of the algorithm. 
+
+####Choose the treshold to decide whether or not a user will see a movie 
+--> Insert screen code 3 & 4
+
+Once the algorithm is trained, we can build a recommendation system using the estimations we obtained of theta = (p(z|u) and p(s|z)). 
+
+We first built an rdd with every possible combination of (user, movie), so that we can compute the probability that a user has been or will be watching the movie. In order to do so, we used the hidden variables Z (the classes) that help us in the computation of the probability. Thus, we needed to build an rdd with every possible combination of ((user, movie), class). 
+
+After that, we computed the probability that a user has been or will be watching a movie using the hidden variables : : p(movie | user) = p(movie | class) * p(class | movie). We obtained the following probability distribution : 
+
+--> Insert plot probas
+
+Given the above plot, we decided to set a treshold at 0.02. If the probability of the movie given the user is higher than 0.02, we can advise this movie to the user. 
 
 #### Concretely: running it on the cluster 101
 
