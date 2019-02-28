@@ -1,9 +1,6 @@
 import time
 import numpy as np
-<<<<<<< HEAD
-=======
 import pyspark
->>>>>>> 89d0409e595fc53b94b5edd22d129bb2481a2eb3
 from numpy import random
 from pyspark import sql
 import pyspark
@@ -44,6 +41,7 @@ random_p = list((proba0 / np.reshape(proba0.sum(1), (int(ordered_rdd.count()/nb_
 
 #Assign a probability to each triplet (user, movie, class)
 q = ordered_rdd.map(lambda x : (x, random_p.pop(0)))
+num_partitions = q.getNumPartitions()
 
 #Create an empty list to keep track of the LogLikelihood
 LogLik = []
@@ -74,7 +72,7 @@ for i in range(nb_iterations) :
     
     #Divide the probability of the (movie, class) couple by the probability of the class
     Nsz = Nsz.map(lambda x : (x[0][1], (x[0][0], x[1])))
-    Psz = Nsz.join(Nz)
+    Psz = Nsz.join(Nz).coalesce(num_partitions)
     Psz = Psz.map(lambda x : ((x[1][0][0], x[0]), x[1][0][1] / x[1][1])) #This gives us p(s | u)
 
     print("\n \n \n Start of p(z u) number "+str(i)+"\n \n \n")
@@ -91,7 +89,7 @@ for i in range(nb_iterations) :
     
     #Divide the probability of the (class, user) couple by the probability of the user
     Nzu = Nzu.map(lambda x : (x[0][0], (x[0][1], x[1])))
-    Pzu = Nzu.join(Nu)
+    Pzu = Nzu.join(Nu).coalesce(num_partitions)
     Pzu = Pzu.map(lambda x : ((x[1][0][0], x[0]), x[1][0][1] / x[1][1])) #This gives us p(u | z)
 
     print("\n \n \n Start of E-STEP number "+str(i)+"\n \n \n")
@@ -104,9 +102,9 @@ for i in range(nb_iterations) :
     #We create couples (z,u) and (s,z) for each triplet (u,s,z) and change their places to make the join with Pzu and Psz possible
     
     q_int = q.map(lambda x : ((x[0][1], x[0][0][0]), (x[0][0][1], x[0][1])))
-    q_int2 = q_int.join(Pzu)
+    q_int2 = q_int.join(Pzu).coalesce(num_partitions)
     q_int3 = q_int2.map(lambda x : (x[1][0], (x[0], x[1][1])))
-    PzuPsz = q_int3.join(Psz)
+    PzuPsz = q_int3.join(Psz).coalesce(num_partitions)
 
     print("\n \n \n After the joins number"+str(i)+"\n \n \n")
     
@@ -128,7 +126,7 @@ for i in range(nb_iterations) :
     print("\n \n \n q update "+str(i)+"\n \n \n")
     
     #For each (u,s,z), compute p(s|z)p(z|u) / sum( p(s|z)p(z|u) ) (this corresponds to the new q( z | (u,s) )
-    q = PzuPsz.join(SumPzuPsz)
+    q = PzuPsz.join(SumPzuPsz).coalesce(num_partitions)
     q = q.map(lambda x : ((x[0], x[1][0][0]), x[1][0][1]/x[1][1]))
 
     end = time.time()
@@ -151,8 +149,8 @@ data = data.distinct()
 
 ordered_data = data.sortBy(lambda x : (x[0], x[1], x[2]))
 couples = ordered_data.map(lambda x : ((x[2], x[0]), (x[1], x[2])))
-probas = couples.join(Pzu).map(lambda x : (x[1][0], (x[0], x[1][1])))
-probas = probas.join(Psz)
+probas = couples.join(Pzu).coalesce(num_partitions).map(lambda x : (x[1][0], (x[0], x[1][1])))
+probas = probas.join(Psz).coalesce(num_partitions)
 Psu = probas.map(lambda x : (x[1][0][0][1], x[0][0], x[1][0][1]*x[1][1]))
 probs = Psu.map(lambda x : x[2])
 
@@ -160,13 +158,7 @@ def prediction(rdd, threshold):
     return(rdd.map(lambda x : (x[0],x[1], x[2] >=threshold)))
 
 result = prediction(Psu, 0.01)
-<<<<<<< HEAD
+
 result.saveAsTextFile("hdfs:///user/hadoop/recommend/result")
 
-
 sc.stop()
-=======
-
-#Save the result on HDFS
-result.saveAsTextFile("hdfs:///user/hadoop/plsi/output/final_result")
->>>>>>> 89d0409e595fc53b94b5edd22d129bb2481a2eb3
