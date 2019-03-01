@@ -1,10 +1,9 @@
 import time
 import numpy as np
 import pyspark
+
 from numpy import random
 from pyspark import sql
-import pyspark
-import time
 
 sc = pyspark.SparkContext()
 
@@ -19,9 +18,11 @@ rdd = rdd.filter(lambda x: x != header)
 #Keep only (user, movie) information
 rdd = rdd.map(lambda line : line.split(',')).map(lambda line : line[0] + ',' + line[2])
 
-#Initialize number of classes and number of iteratins
+#Initialize number of classes and number of iterations
 nb_z = 3
-nb_iterations = 5
+nb_iterations = 20
+
+print("\n \n \n Starting PLSI Algorithm for "+str(nb_z)+" classes and "+str(nb_iterations)+" iterations \n \n \n")
 
 #Compute the cartesian product of the (user, movie) couples with the 3 classes
 classes = sc.parallelize(range(nb_z))
@@ -48,15 +49,13 @@ LogLik = []
 
 ###### Run the EM algorithm on nb_iterations #####
 
-print("\n \n \n \n \n \n Preliminary work done! \n \n \n \n \n \n")
+print("\n \n \n Preliminary work done! \n \n \n")
 
 for i in range(nb_iterations) :
 
     start = time.time()
     
     #### M-STEP - Compute p(s|z) and p(z|u) based on q( z | (u,s) ) ####
-    
-    print("\n \n \n Start of M-STEP number "+str(i)+"\n \n \n")
 
     ## Compute p(s | z) : sum the probas associated to every couple (s,z) and divide it by the sum of probas associated to this z ##
     
@@ -74,8 +73,6 @@ for i in range(nb_iterations) :
     Nsz = Nsz.map(lambda x : (x[0][1], (x[0][0], x[1])))
     Psz = Nsz.join(Nz).coalesce(num_partitions)
     Psz = Psz.map(lambda x : ((x[1][0][0], x[0]), x[1][0][1] / x[1][1])) #This gives us p(s | u)
-
-    print("\n \n \n Start of p(z u) number "+str(i)+"\n \n \n")
     
     ## Compute p(z | u) : sum the probas associated to every couple (u,z) and divide by the sum of probas associated to this u ##
     
@@ -91,8 +88,6 @@ for i in range(nb_iterations) :
     Nzu = Nzu.map(lambda x : (x[0][0], (x[0][1], x[1])))
     Pzu = Nzu.join(Nu).coalesce(num_partitions)
     Pzu = Pzu.map(lambda x : ((x[1][0][0], x[0]), x[1][0][1] / x[1][1])) #This gives us p(u | z)
-
-    print("\n \n \n Start of E-STEP number "+str(i)+"\n \n \n")
     
     ### E-STEP - Compute new q( z | (u,s) ) = p(s|z)p(z|u) / sum ( p(s|z)p(z|u) )###
     
@@ -105,25 +100,19 @@ for i in range(nb_iterations) :
     q_int2 = q_int.join(Pzu).coalesce(num_partitions)
     q_int3 = q_int2.map(lambda x : (x[1][0], (x[0], x[1][1])))
     PzuPsz = q_int3.join(Psz).coalesce(num_partitions)
-
-    print("\n \n \n After the joins number"+str(i)+"\n \n \n")
     
     #We now multiply p(z|u) and p(s|z) to obtain p(s|u)
     PzuPsz = PzuPsz.map(lambda x: ((x[1][0][0][1], x[0][0]), (x[0][1], x[1][0][1]*x[1][1])))
     
     ## For each (u,s), we compute sum ( p(s | z)* p(z | u) ) (summing over z) (this corresponds to p(s|u)) ##
     SumPzuPsz = PzuPsz.map(lambda x : (x[0], x[1][1])).reduceByKey(lambda x,y : x+y)
-
-    print("\n \n \n Loglik step "+str(i)+"\n \n \n")
     
     #Update LogLikelihood
     log = SumPzuPsz.map(lambda x : np.log(x[1]))
     N = SumPzuPsz.count()
     L = log.reduce(lambda x,y : x+y)
-    print("Iteration "+str(i)+ "loglikelihood is:" + str(L/N))
+    print("\n \n \n Iteration "+str(i+1)+ "complete, loglikelihood is: " + str(L/N)+"\n \n \n")
     LogLik.append(L/N)
-
-    print("\n \n \n q update "+str(i)+"\n \n \n")
     
     #For each (u,s,z), compute p(s|z)p(z|u) / sum( p(s|z)p(z|u) ) (this corresponds to the new q( z | (u,s) )
     q = PzuPsz.join(SumPzuPsz).coalesce(num_partitions)
@@ -131,32 +120,34 @@ for i in range(nb_iterations) :
 
     end = time.time()
 
-    print("\n \n \n Iteration "+str(i)+" completed in "+str(end-start)+"\n \n \n")
-
-print(LogLik)
-
-print("\n \n \n Recommendation \n \n \n ")
+    print("\n \n \n Iteration "+str(i+1)+" completed in "+str(end-start)+"\n \n \n")
 
 #Build the recommendation
 
-#users = rdd.map(lambda x : x[0])
-#movies = rdd.map(lambda x : x[1])
-#classes = sc.parallelize(range(nb_z))
-#    
-#data = users.cartesian(movies)
-#data = data.cartesian(classes).map(lambda line : (line[0][0], line[0][1], line[1]))
-#data = data.distinct()
-#
-#ordered_data = data.sortBy(lambda x : (x[0], x[1], x[2]))
-#couples = ordered_data.map(lambda x : ((x[2], x[0]), (x[1], x[2])))
-#probas = couples.join(Pzu).coalesce(num_partitions).map(lambda x : (x[1][0], (x[0], x[1][1])))
-#probas = probas.join(Psz).coalesce(num_partitions)
-#Psu = probas.map(lambda x : (x[1][0][0][1], x[0][0], x[1][0][1]*x[1][1]))
-#probs = Psu.map(lambda x : x[2])
-#
-#def prediction(rdd, threshold):
-#    return(rdd.map(lambda x : (x[0],x[1], x[2] >=threshold)))
-#
-#result = prediction(Psu, 0.01)
+print("\n \n \n Building the recommendation \n \n \n ")
+
+users = rdd.map(lambda x : x[0])
+movies = rdd.map(lambda x : x[1])
+classes = sc.parallelize(range(nb_z))
+    
+data = users.cartesian(movies)
+data = data.cartesian(classes).map(lambda line : (line[0][0], line[0][1], line[1]))
+data = data.distinct()
+
+ordered_data = data.sortBy(lambda x : (x[0], x[1], x[2]))
+couples = ordered_data.map(lambda x : ((x[2], x[0]), (x[1], x[2])))
+probas = couples.join(Pzu).coalesce(num_partitions).map(lambda x : (x[1][0], (x[0], x[1][1])))
+probas = probas.join(Psz).coalesce(num_partitions)
+Psu = probas.map(lambda x : (x[1][0][0][1], x[0][0], x[1][0][1]*x[1][1]))
+probs = Psu.map(lambda x : x[2])
+
+threshold = np.quantile(probs.collect(), 0.9)
+
+def prediction(rdd, threshold):
+    return(rdd.map(lambda x : (x[0],x[1], x[2] >=threshold)))
+
+result = prediction(Psu, threshold)
+
+result.saveAsTextFile("hdfs:///user/hadoop/recommend/prediction")
 
 sc.stop()
